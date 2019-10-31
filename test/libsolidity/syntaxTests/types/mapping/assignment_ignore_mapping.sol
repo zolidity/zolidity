@@ -47,4 +47,7 @@ contract Test {
     }
 }
 // ----
-// run() -> 2, 42, 42, 6, 999, 7
+// TypeError: (546-562): Type struct Test.A memory is only valid in storage.
+// TypeError: (578-594): Type struct Test.B memory is only valid in storage.
+// TypeError: (612-628): Type struct Test.C memory is only valid in storage.
+// TypeError: (670-673): Type cannot live outside storage.

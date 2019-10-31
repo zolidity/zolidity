@@ -95,6 +95,7 @@ Breaking changes:
  * Syntax: Abstract contracts need to be marked explicitly as abstract by using the ``abstract`` keyword.
  * Syntax: ``length`` member of arrays is now always read-only, even for storage arrays.
  * Type Checker: Resulting type of exponentiation is equal to the type of the base. Also allow signed types for the base.
+ * Type Checker: Disallows nested mappings that are requested to live outside storage.
 
 Language Features:
  * Allow explicit conversions from ``address`` to ``address payable`` via ``payable(...)``.
