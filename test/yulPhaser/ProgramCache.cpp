@@ -212,11 +212,11 @@ BOOST_FIXTURE_TEST_CASE(startRound_should_remove_entries_older_than_two_rounds, 
 
 BOOST_FIXTURE_TEST_CASE(gatherStats_should_return_cache_statistics, ProgramCacheFixture)
 {
-	size_t sizeI = optimisedProgram(m_program, "I").codeSize();
-	size_t sizeIu = optimisedProgram(m_program, "Iu").codeSize();
-	size_t sizeIuO = optimisedProgram(m_program, "IuO").codeSize();
-	size_t sizeL = optimisedProgram(m_program, "L").codeSize();
-	size_t sizeLT = optimisedProgram(m_program, "LT").codeSize();
+	size_t sizeI = optimisedProgram(m_program, "I").codeSize(CodeSize::DefaultWeights);
+	size_t sizeIu = optimisedProgram(m_program, "Iu").codeSize(CodeSize::DefaultWeights);
+	size_t sizeIuO = optimisedProgram(m_program, "IuO").codeSize(CodeSize::DefaultWeights);
+	size_t sizeL = optimisedProgram(m_program, "L").codeSize(CodeSize::DefaultWeights);
+	size_t sizeLT = optimisedProgram(m_program, "LT").codeSize(CodeSize::DefaultWeights);
 
 	m_programCache.optimiseProgram("L");
 	m_programCache.optimiseProgram("Iu");
