@@ -30,19 +30,50 @@ struct Dialect;
 struct EVMDialect;
 
 /**
+ * Weights to be assigned to specific yul statements and expressions by a metric.
+*/
+struct CodeWeights
+{
+	// Statements
+	size_t expressionStatementCost;
+	size_t assignmentCost;
+	size_t variableDeclarationCost;
+	size_t functionDefinitionCost;
+	size_t ifCost;
+	size_t switchCost;
+	size_t caseCost;
+	size_t forLoopCost;
+	size_t breakCost;
+	size_t continueCost;
+	size_t leaveCost;
+	size_t blockCost;
+
+	// Expressions
+	size_t functionCallCost;
+	size_t identifierCost;
+	size_t literalCost;
+
+	size_t costOf(Statement const& _statement) const;
+	size_t costOf(Expression const& _expression) const;
+};
+
+/**
  * Metric for the size of code.
- * More specifically, the number of AST nodes.
  * Ignores function definitions while traversing the AST by default.
  * If you want to know the size of a function, you have to invoke this on its body.
  *
- * As an exception, the following AST elements have a cost of zero:
+ * The cost of each statement and expression type is configurable via CodeWeights.
+ *
+ * The default weights are meant to reflect specifically the number of AST nodes.
+ * The following AST elements have a default cost of zero (because the cleanup phase would
+ * remove them anyway or they are just wrappers around something else will be counted instead):
  *  - expression statement (only the expression inside has a cost)
  *  - block (only the statements inside have a cost)
  *  - variable references
  *  - variable declarations (only the right hand side has a cost)
  *  - assignments (only the value has a cost)
  *
- * As another exception, each statement incurs and additional cost of one
+ * Each statement incurs and additional cost of one
  * per jump/branch. This means if, break and continue statements have a cost of 2,
  * switch statements have a cost of 1 plus the number of cases times two,
  * and for loops cost 3.
@@ -50,13 +81,34 @@ struct EVMDialect;
 class CodeSize: public ASTWalker
 {
 public:
-	static size_t codeSize(Statement const& _statement);
-	static size_t codeSize(Expression const& _expression);
-	static size_t codeSize(Block const& _block);
-	static size_t codeSizeIncludingFunctions(Block const& _block);
+	static constexpr CodeWeights DefaultWeights = {
+		/* expressionStatementCost = */ 0,
+		/* assignmentCost = */ 0,
+		/* variableDeclarationCost = */ 0,
+		/* functionDefinitionCost = */ 1,
+		/* ifCost = */ 2,
+		/* switchCost = */ 1,
+		/* caseCost = */ 2,
+		/* forLoopCost = */ 3,
+		/* breakCost = */ 2,
+		/* continueCost = */ 2,
+		/* leaveCost = */ 2,
+		/* blockCost = */ 0,
+
+		/* functionCallCost = */ 1,
+		/* identifierCost = */ 0,
+		/* literalCost = */ 1,
+	};
+
+	static size_t codeSize(Statement const& _statement, CodeWeights const& _weights = DefaultWeights);
+	static size_t codeSize(Expression const& _expression, CodeWeights const& _weights = DefaultWeights);
+	static size_t codeSize(Block const& _block, CodeWeights const& _weights = DefaultWeights);
+	static size_t codeSizeIncludingFunctions(Block const& _block, CodeWeights const& _weights = DefaultWeights);
 
 private:
-	CodeSize(bool _ignoreFunctions = true): m_ignoreFunctions(_ignoreFunctions) {}
+	CodeSize(bool _ignoreFunctions = true, CodeWeights const& _weights = DefaultWeights):
+		m_ignoreFunctions(_ignoreFunctions),
+		m_weights(_weights) {}
 
 	void visit(Statement const& _statement) override;
 	void visit(Expression const& _expression) override;
@@ -64,6 +116,7 @@ private:
 private:
 	bool m_ignoreFunctions;
 	size_t m_size = 0;
+	CodeWeights m_weights;
 };
 
 /**
