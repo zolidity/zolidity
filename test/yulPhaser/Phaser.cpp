@@ -32,6 +32,7 @@
 using namespace std;
 using namespace solidity::util;
 using namespace solidity::langutil;
+using namespace solidity::yul;
 
 namespace fs = boost::filesystem;
 
@@ -84,6 +85,7 @@ protected:
 		/* relativeMetricScale = */ 5,
 		/* chromosomeRepetitions = */ 1,
 	};
+	CodeWeights const m_weights = CodeSize::DefaultWeights;
 };
 
 class PoulationFactoryFixture
@@ -176,7 +178,7 @@ BOOST_FIXTURE_TEST_CASE(build_should_create_metric_of_the_right_type, FitnessMet
 {
 	m_options.metric = MetricChoice::RelativeCodeSize;
 	m_options.metricAggregator = MetricAggregatorChoice::Sum;
-	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, {m_programs[0]}, {nullptr});
+	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, {m_programs[0]}, {nullptr}, m_weights);
 	BOOST_REQUIRE(metric != nullptr);
 
 	auto sumMetric = dynamic_cast<FitnessMetricSum*>(metric.get());
@@ -194,7 +196,7 @@ BOOST_FIXTURE_TEST_CASE(build_should_respect_chromosome_repetitions_option, Fitn
 	m_options.metric = MetricChoice::CodeSize;
 	m_options.metricAggregator = MetricAggregatorChoice::Average;
 	m_options.chromosomeRepetitions = 5;
-	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, {m_programs[0]}, {nullptr});
+	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, {m_programs[0]}, {nullptr}, m_weights);
 	BOOST_REQUIRE(metric != nullptr);
 
 	auto averageMetric = dynamic_cast<FitnessMetricAverage*>(metric.get());
@@ -212,7 +214,7 @@ BOOST_FIXTURE_TEST_CASE(build_should_set_relative_metric_scale, FitnessMetricFac
 	m_options.metric = MetricChoice::RelativeCodeSize;
 	m_options.metricAggregator = MetricAggregatorChoice::Average;
 	m_options.relativeMetricScale = 10;
-	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, {m_programs[0]}, {nullptr});
+	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, {m_programs[0]}, {nullptr}, m_weights);
 	BOOST_REQUIRE(metric != nullptr);
 
 	auto averageMetric = dynamic_cast<FitnessMetricAverage*>(metric.get());
@@ -230,7 +232,8 @@ BOOST_FIXTURE_TEST_CASE(build_should_create_metric_for_each_input_program, Fitne
 	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(
 		m_options,
 		m_programs,
-		vector<shared_ptr<ProgramCache>>(m_programs.size(), nullptr)
+		vector<shared_ptr<ProgramCache>>(m_programs.size(), nullptr),
+		m_weights
 	);
 	BOOST_REQUIRE(metric != nullptr);
 
@@ -249,7 +252,7 @@ BOOST_FIXTURE_TEST_CASE(build_should_pass_program_caches_to_metrics, FitnessMetr
 	};
 
 	m_options.metric = MetricChoice::RelativeCodeSize;
-	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, m_programs, caches);
+	unique_ptr<FitnessMetric> metric = FitnessMetricFactory::build(m_options, m_programs, caches, m_weights);
 	BOOST_REQUIRE(metric != nullptr);
 
 	auto combinedMetric = dynamic_cast<FitnessMetricCombination*>(metric.get());

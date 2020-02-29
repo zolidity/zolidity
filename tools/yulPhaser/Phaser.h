@@ -38,6 +38,13 @@ class CharStream;
 
 }
 
+namespace solidity::yul
+{
+
+struct CodeWeights;
+
+}
+
 namespace solidity::phaser
 {
 
@@ -118,6 +125,17 @@ public:
 };
 
 /**
+ * Builds and validates instances of @a CodeWeights.
+ */
+class CodeWeightFactory
+{
+public:
+	static yul::CodeWeights buildFromCommandLine(
+		boost::program_options::variables_map const& _arguments
+	);
+};
+
+/**
  * Builds and validates instances of @a FitnessMetric and its derived classes.
  */
 class FitnessMetricFactory
@@ -136,7 +154,8 @@ public:
 	static std::unique_ptr<FitnessMetric> build(
 		Options const& _options,
 		std::vector<Program> _programs,
-		std::vector<std::shared_ptr<ProgramCache>> _programCaches
+		std::vector<std::shared_ptr<ProgramCache>> _programCaches,
+		yul::CodeWeights const& _weights
 	);
 };
 
