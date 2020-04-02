@@ -1191,8 +1191,12 @@ void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
 		// If the value is visited twice, `defineExpression` is called twice on
 		// the same expression.
 		solUnimplementedAssert(!varDecl->isConstant(), "");
-		solUnimplementedAssert(!varDecl->immutable(), "");
-		if (m_context.isLocalVariable(*varDecl))
+		if (varDecl->isStateVariable() && varDecl->immutable())
+			setLValue(_identifier, IRLValue{
+				*varDecl->annotation().type,
+				IRLValue::Immutable{varDecl}
+			});
+		else if (m_context.isLocalVariable(*varDecl))
 			setLValue(_identifier, IRLValue{
 				*varDecl->annotation().type,
 				IRLValue::Stack{m_context.localVariable(*varDecl)}
@@ -1622,6 +1626,18 @@ void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable
 				}
 			},
 			[&](IRLValue::Stack const& _stack) { assign(_stack.variable, _value); },
+			[&](IRLValue::Immutable const& _immutable)
+			{
+				solUnimplementedAssert(_lvalue.type.isValueType(), "");
+				solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1, "");
+				solAssert(_lvalue.type == *_immutable.variable->type(), "");
+				size_t memOffset = m_context.immutableMemoryOffset(*_immutable.variable);
+
+				IRVariable prepared(m_context.newYulVariable(), _lvalue.type);
+				define(prepared, _value);
+
+				m_code << "mstore(" << to_string(memOffset) << ", " << prepared.name() << ")\n";
+			},
 			[&](IRLValue::Tuple const& _tuple) {
 				auto components = std::move(_tuple.components);
 				for (size_t i = 0; i < components.size(); i++)
@@ -1676,6 +1692,12 @@ IRVariable IRGeneratorForStatements::readFromLValue(IRLValue const& _lvalue)
 		},
 		[&](IRLValue::Stack const& _stack) {
 			define(result, _stack.variable);
+		},
+		[&](IRLValue::Immutable const& _immutable) {
+			solUnimplementedAssert(_lvalue.type.isValueType(), "");
+			solUnimplementedAssert(_lvalue.type.sizeOnStack() == 1, "");
+			solAssert(_lvalue.type == *_immutable.variable->type(), "");
+			define(result) << "getImmutable(\"" << to_string(_immutable.variable->id()) << "\")\n";
 		},
 		[&](IRLValue::Tuple const&) {
 			solAssert(false, "Attempted to read from tuple lvalue.");

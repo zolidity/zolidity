@@ -95,7 +95,7 @@ string IRGenerator::generate(ContractDefinition const& _contract)
 		}
 	)");
 
-	resetContext(_contract);
+	resetContext(_contract, true);
 
 	t("CreationObject", creationObjectName(_contract));
 	t("memoryInit", memoryInit());
@@ -109,7 +109,7 @@ string IRGenerator::generate(ContractDefinition const& _contract)
 			generateFunction(*fun);
 	t("functions", m_context.functionCollector().requestedFunctions());
 
-	resetContext(_contract);
+	resetContext(_contract, false);
 	m_context.setMostDerivedContract(_contract);
 	t("RuntimeObject", runtimeObjectName(_contract));
 	t("dispatch", dispatchRoutine(_contract));
@@ -298,14 +298,62 @@ string IRGenerator::constructorCode(ContractDefinition const& _contract)
 
 	return out.str();
 }
+/*
+	// Push all immutable values on the stack.
+	for (auto const& immutable: immutables)
+		CompilerUtils(m_context).loadFromMemory(m_context.immutableMemoryOffset(*immutable), *immutable->annotation().type);
+	m_context.pushSubroutineSize(m_context.runtimeSub());
+	if (immutables.empty())
+		m_context << Instruction::DUP1;
+	m_context.pushSubroutineOffset(m_context.runtimeSub());
+	m_context << u256(0) << Instruction::CODECOPY;
+	// Assign immutable values from stack in reversed order.
+	for (auto const& immutable: immutables | boost::adaptors::reversed)
+	{
+		auto slotNames = m_context.immutableVariableSlotNames(*immutable);
+		for (auto&& slotName: slotNames | boost::adaptors::reversed)
+			m_context.appendImmutableAssignment(slotName);
+	}
+	if (!immutables.empty())
+		m_context.pushSubroutineSize(m_context.runtimeSub());
+*/
 
 string IRGenerator::deployCode(ContractDefinition const& _contract)
 {
 	Whiskers t(R"X(
+		<#loadImmutables>
+			let <var> := mload(<memoryOffset>)
+		</loadImmutables>
+
 		codecopy(0, dataoffset("<object>"), datasize("<object>"))
+
+		<#storeImmutables>
+			setImmutable(<immutableName>, <var>)
+		</storeImmutables>
+
 		return(0, datasize("<object>"))
 	)X");
 	t("object", runtimeObjectName(_contract));
+	vector<map<string, string>> loadImmutables;
+	vector<map<string, string>> storeImmutables;
+
+	for (VariableDeclaration const* immutable: ContractType(_contract).immutableVariables())
+	{
+		solUnimplementedAssert(immutable->type()->isValueType(), "");
+		solUnimplementedAssert(immutable->type()->sizeOnStack() == 1, "");
+		string yulVar = m_context.newYulVariable();
+		loadImmutables.emplace_back(map<string, string>{
+			{"var"s, yulVar},
+			{"memoryOffset"s, to_string(m_context.immutableMemoryOffset(*immutable))}
+		});
+		storeImmutables.emplace_back(map<string, string>{
+			{"var"s, yulVar},
+			{"immutableName"s, to_string(immutable->id())}
+		});
+		m_context.registerImmutableVariable(*immutable);
+	}
+	t("loadImmutables", std::move(loadImmutables));
+	t("storeImmutables", std::move(storeImmutables));
 	return t.render();
 }
 
@@ -405,13 +453,13 @@ string IRGenerator::memoryInit()
 	// and thus can assume all memory to be zero, including the contents of
 	// the "zero memory area" (the position CompilerUtils::zeroPointer points to).
 	return
-		Whiskers{"mstore(<memPtr>, <generalPurposeStart>)"}
+		Whiskers{"mstore(<memPtr>, <freeMemoryStart>)"}
 		("memPtr", to_string(CompilerUtils::freeMemoryPointer))
-		("generalPurposeStart", to_string(CompilerUtils::generalPurposeMemoryStart))
+		("freeMemoryStart", to_string(CompilerUtils::generalPurposeMemoryStart + m_context.reservedMemory()))
 		.render();
 }
 
-void IRGenerator::resetContext(ContractDefinition const& _contract)
+void IRGenerator::resetContext(ContractDefinition const& _contract, bool _creationTime)
 {
 	solAssert(
 		m_context.functionCollector().requestedFunctions().empty(),
@@ -422,4 +470,8 @@ void IRGenerator::resetContext(ContractDefinition const& _contract)
 	m_context.setMostDerivedContract(_contract);
 	for (auto const& var: ContractType(_contract).stateVariables())
 		m_context.addStateVariable(*get<0>(var), get<1>(var), get<2>(var));
+
+	if (_creationTime)
+		for (VariableDeclaration const* var: ContractType(_contract).immutableVariables())
+			m_context.registerImmutableVariable(*var);
 }
