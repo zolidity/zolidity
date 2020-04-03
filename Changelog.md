@@ -2,17 +2,7 @@
 
 Breaking changes:
  * Type Checker: Disallow virtual for library functions.
-
-Language Features:
-
-
-Compiler Features:
-
-
-Bugfixes:
-
-
-### 0.6.6 (unreleased)
+ * General: a type error message is issued for the deprecated dot syntax for `value` and `gas`.
 
 Language Features:
 

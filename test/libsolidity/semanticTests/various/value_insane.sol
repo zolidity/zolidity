@@ -13,10 +13,10 @@ contract test {
     }
 
     function sendAmount(uint256 amount) public returns (uint256 bal) {
-        return h.getBalance.value(amount).gas(1000).value(amount + 3)(); // overwrite value
+        return h.getBalance{value: amount, gas: 1000}();
     }
 }
 
 // ----
 // constructor(), 20 wei ->
-// sendAmount(uint256): 5 -> 8
+// sendAmount(uint256): 5 -> 5
