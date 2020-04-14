@@ -306,11 +306,15 @@ vector<YulString> AsmAnalyzer::operator()(FunctionCall const& _funCall)
 					_funCall.functionName.location,
 					"Function expects direct literals as arguments."
 				);
-			else if (!m_dataNames.count(std::get<Literal>(arg).value))
+			else if (!m_dataNames.count(std::get<Literal>(arg).value) && (
+				_funCall.functionName.name.str() == "datasize" ||
+				_funCall.functionName.name.str() == "dataoffset"
+			))
 				typeError(
 					_funCall.functionName.location,
 					"Unknown data object \"" + std::get<Literal>(arg).value.str() + "\"."
 				);
+			// TODO add else check for immutables?
 		}
 	}
 	std::reverse(argTypes.begin(), argTypes.end());

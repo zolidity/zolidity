@@ -61,7 +61,7 @@ pair<YulString, BuiltinFunctionForEVM> createEVMFunction(
 		FunctionCall const&,
 		AbstractAssembly& _assembly,
 		BuiltinContext&,
-		std::function<void()> _visitArguments
+		BuiltinFunctionForEVM::VisitArguments const& _visitArguments
 	) {
 		_visitArguments();
 		_assembly.appendInstruction(_instruction);
@@ -76,7 +76,7 @@ pair<YulString, BuiltinFunctionForEVM> createFunction(
 	size_t _returns,
 	SideEffects _sideEffects,
 	vector<bool> _literalArguments,
-	std::function<void(FunctionCall const&, AbstractAssembly&, BuiltinContext&, std::function<void()>)> _generateCode
+	std::function<void(FunctionCall const&, AbstractAssembly&, BuiltinContext&, BuiltinFunctionForEVM::VisitArguments const&)> _generateCode
 )
 {
 	solAssert(_literalArguments.size() == _params || _literalArguments.empty(), "");
@@ -116,7 +116,7 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 			FunctionCall const& _call,
 			AbstractAssembly& _assembly,
 			BuiltinContext& _context,
-			function<void()>
+			BuiltinFunctionForEVM::VisitArguments const&
 		) {
 			yulAssert(_context.currentObject, "No object available.");
 			yulAssert(_call.arguments.size() == 1, "");
@@ -137,7 +137,7 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 			FunctionCall const& _call,
 			AbstractAssembly& _assembly,
 			BuiltinContext& _context,
-			std::function<void()>
+			BuiltinFunctionForEVM::VisitArguments const&
 		) {
 			yulAssert(_context.currentObject, "No object available.");
 			yulAssert(_call.arguments.size() == 1, "");
@@ -164,10 +164,46 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 				FunctionCall const&,
 				AbstractAssembly& _assembly,
 				BuiltinContext&,
-				std::function<void()> _visitArguments
+				BuiltinFunctionForEVM::VisitArguments const& _visitArguments
 			) {
 				_visitArguments();
 				_assembly.appendInstruction(evmasm::Instruction::CODECOPY);
+			}
+		));
+		builtins.emplace(createFunction(
+			"setimmutable",
+			2,
+			0,
+			SideEffects{false, false, false, false, true},
+			{true, false},
+			[](
+				FunctionCall const& _call,
+				AbstractAssembly& _assembly,
+				BuiltinContext&,
+				BuiltinFunctionForEVM::VisitArguments const& _visitArguments
+			) {
+				solAssert(_call.arguments.size() == 2, "");
+
+				_visitArguments(_call.arguments[1]);
+				Expression const& arg = _call.arguments.front();
+				YulString identifier = std::get<Literal>(arg).value;
+				_assembly.appendImmutableAssignment(identifier.str());
+			}
+		));
+		builtins.emplace(createFunction(
+			"loadimmutable",
+			1,
+			1,
+			SideEffects{},
+			{true},
+			[](
+				FunctionCall const& _call,
+				AbstractAssembly& _assembly,
+				BuiltinContext&,
+				BuiltinFunctionForEVM::VisitArguments const&
+			) {
+				solAssert(_call.arguments.size() == 1, "");
+				_assembly.appendImmutable(std::get<Literal>(_call.arguments.front()).value.str());
 			}
 		));
 	}
@@ -271,7 +307,7 @@ EVMDialectTyped::EVMDialectTyped(langutil::EVMVersion _evmVersion, bool _objectA
 		FunctionCall const&,
 		AbstractAssembly&,
 		BuiltinContext&,
-		std::function<void()> _visitArguments
+		BuiltinFunctionForEVM::VisitArguments const& _visitArguments
 	) {
 		_visitArguments();
 	}));
@@ -281,7 +317,7 @@ EVMDialectTyped::EVMDialectTyped(langutil::EVMVersion _evmVersion, bool _objectA
 		FunctionCall const&,
 		AbstractAssembly& _assembly,
 		BuiltinContext&,
-		std::function<void()> _visitArguments
+		BuiltinFunctionForEVM::VisitArguments const& _visitArguments
 	) {
 		// A value larger than 1 causes an invalid instruction.
 		_visitArguments();

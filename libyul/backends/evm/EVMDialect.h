@@ -23,6 +23,7 @@
 #include <libyul/Dialect.h>
 
 #include <libyul/backends/evm/AbstractAssembly.h>
+#include <libyul/AsmData.h>
 #include <liblangutil/EVMVersion.h>
 
 #include <map>
@@ -47,11 +48,20 @@ struct BuiltinContext
 
 struct BuiltinFunctionForEVM: public BuiltinFunction
 {
+	struct VisitArguments
+	{
+		std::function<void(yul::Expression const&)> m_single;
+		std::function<void()> m_all;
+
+		void operator()() const { m_all(); }
+		void operator()(yul::Expression const& _arg) const { m_single(_arg); }
+	};
+
 	std::optional<evmasm::Instruction> instruction;
 	/// Function to generate code for the given function call and append it to the abstract
-	/// assembly. The fourth parameter is called to visit (and generate code for) the arguments
-	/// from right to left.
-	std::function<void(FunctionCall const&, AbstractAssembly&, BuiltinContext&, std::function<void()>)> generateCode;
+	/// assembly. The fourth parameter is called to visit (and generate code for) the given
+	/// argument or for all arguments from right to left if no parameter is given.
+	std::function<void(FunctionCall const&, AbstractAssembly&, BuiltinContext&, VisitArguments const&)> generateCode;
 };
 
 

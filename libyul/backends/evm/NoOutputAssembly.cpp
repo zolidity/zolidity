@@ -142,6 +142,17 @@ AbstractAssembly::SubID NoOutputAssembly::appendData(bytes const&)
 	return 1;
 }
 
+
+void NoOutputAssembly::appendImmutable(std::string const&)
+{
+	yulAssert(false, "loadimmutable not implemented.");
+}
+
+void NoOutputAssembly::appendImmutableAssignment(std::string const&)
+{
+	yulAssert(false, "setimmutable not implemented.");
+}
+
 NoOutputEVMDialect::NoOutputEVMDialect(EVMDialect const& _copyFrom):
 	EVMDialect(_copyFrom.evmVersion(), _copyFrom.providesObjectAccess())
 {

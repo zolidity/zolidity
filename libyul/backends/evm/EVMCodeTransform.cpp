@@ -258,11 +258,20 @@ void CodeTransform::operator()(FunctionCall const& _call)
 
 	if (BuiltinFunctionForEVM const* builtin = m_dialect.builtin(_call.functionName.name))
 	{
-		builtin->generateCode(_call, m_assembly, m_builtinContext, [&]() {
-			for (auto const& arg: _call.arguments | boost::adaptors::reversed)
-				visitExpression(arg);
-			m_assembly.setSourceLocation(_call.location);
-		});
+		builtin->generateCode(_call, m_assembly, m_builtinContext,
+			{
+				[&](yul::Expression const& _arg) {
+					visitExpression(_arg);
+					m_assembly.setSourceLocation(_call.location);
+				},
+				[&]() {
+					for (auto const& arg: _call.arguments | boost::adaptors::reversed)
+							visitExpression(arg);
+
+					m_assembly.setSourceLocation(_call.location);
+				}
+			}
+		);
 	}
 	else
 	{
