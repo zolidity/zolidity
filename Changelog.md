@@ -1,6 +1,7 @@
 ### 0.6.7 (unreleased)
 
 Language Features:
+ * Allow virtual modifiers inside abstract contracts to have empty body. Their implementation will be inside inherited contracts.
 
 
 Compiler Features:
