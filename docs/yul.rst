@@ -1015,3 +1015,117 @@ If you want to use Solidity in stand-alone Yul mode, you activate the optimizer 
     solc --strict-assembly --optimize
 
 In Solidity mode, the Yul optimizer is activated together with the regular optimizer.
+
+
+
+Complete ERC20 Example
+======================
+
+::
+
+    object "Token" {
+        code {
+            // Store the creator in slot zero.
+            sstore(0, caller())
+
+            // Deploy the contract
+            datacopy(0, dataoffset("runtime"), datasize("runtime"))
+            return(0, datasize("runtime"))
+        }
+        object "runtime" {
+            code {
+                // Protection against sending Ether
+                if gt(callvalue(), 0) { revert(0, 0) }
+
+                // Dispatcher
+                switch selector()
+                case 0x70a08231 /* "balanceOf(address)" */ {
+                    returnUint(balanceOf(decodeAsAddress(0)))
+                }
+                case 0x18160ddd /* "totalSupply()" */ {
+                    returnUint(totalSupply())
+                }
+                case 0xa9059cbb /* "transfer(address,uint256)" */ {
+                    transfer(decodeAsAddress(0), decodeAsUint(1))
+                }
+                case 0x40c10f19 /* "mint(address,uint256)" */ {
+                    mint(decodeAsAddress(0), decodeAsUint(1))
+                }
+                default {
+                    revert(0, 0)
+                }
+
+                function mint(account, amount) {
+                    if iszero(calledByOwner()) { revert(0, 0) }
+                    mintTokens(amount)
+                    addToBalance(account, amount)
+                }
+                function transfer(to, amount) {
+                    deductFromBalance(caller(), amount)
+                    addToBalance(to, amount)
+                }
+
+                /* ---------- calldata decoding functions ----------- */
+                function selector() -> s {
+                    s := div(calldataload(0), 0x100000000000000000000000000000000000000000000000000000000)
+                }
+
+                function decodeAsAddress(offset) -> v {
+                    v := decodeAsUint(offset)
+                    if iszero(iszero(and(v, not(0xffffffffffffffffffffffffffffffffffffffff)))) {
+                        revert(0, 0)
+                    }
+                }
+                function decodeAsUint(offset) -> v {
+                    let pos := add(4, mul(offset, 0x20))
+                    if lt(calldatasize(), add(pos, 0x20)) {
+                        revert(0, 0)
+                    }
+                    v := calldataload(pos)
+                }
+                /* ---------- calldata encoding functions ---------- */
+                function returnUint(v) {
+                    mstore(0, v)
+                    return(0, 0x20)
+                }
+
+                /* -------- storage access ---------- */
+                function ownerPos() -> p { p := 0 }
+                function totalSupplyPos() -> p { p := 1 }
+                function owner() -> o {
+                    o := sload(ownerPos())
+                }
+                function totalSupply() -> supply {
+                    supply := sload(totalSupplyPos())
+                }
+                function mintTokens(amount) {
+                    sstore(totalSupplyPos(), safeAdd(totalSupply(), amount))
+                }
+                function accountToStorageOffset(account) -> offset {
+                    offset := add(0x1000, account)
+                }
+                function balanceOf(account) -> bal {
+                    bal := sload(accountToStorageOffset(account))
+                }
+                function addToBalance(account, amount) {
+                    let offset := accountToStorageOffset(account)
+                    sstore(offset, safeAdd(sload(offset), amount))
+                }
+                function deductFromBalance(account, amount) {
+                    let offset := accountToStorageOffset(account)
+                    let bal := sload(offset)
+                    if lt(bal, amount) { revert(0, 0) }
+                    sstore(offset, sub(bal, amount))
+                }
+
+                /* ---------- utility functions ---------- */
+                function safeAdd(a, b) -> r {
+                    r := add(a, b)
+                    if or(lt(r, a), lt(r, b)) { revert(0, 0) }
+                }
+                function calledByOwner() -> cbo {
+                    cbo := eq(owner(), caller())
+                }
+            }
+        }
+    }
