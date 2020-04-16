@@ -37,6 +37,7 @@
 #include <libsolidity/interface/StorageLayout.h>
 
 #include <libyul/AssemblyStack.h>
+#include <libyul/optimiser/Suite.h>
 
 #include <libevmasm/Instruction.h>
 #include <libevmasm/GasMeter.h>
@@ -52,10 +53,13 @@
 #include <libsolutil/JSON.h>
 
 #include <memory>
+#include <set>
 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/range/adaptor/map.hpp>
+#include <boost/range/adaptor/transformed.hpp>
 
 #ifdef _WIN32 // windows
 	#include <io.h>
@@ -1174,7 +1178,31 @@ bool CommandLineInterface::processInput()
 		if (m_args.count(g_strNoOptimizeYul))
 			settings.runYulOptimiser = false;
 		if (m_args.count(g_strYulOptimizations))
+		{
+			if (!settings.runYulOptimiser)
+			{
+				// The problem here is that when yul optimiser is disabled, its settings do not
+				// get stored in metadata so metadata would not reproduce the same exact command line.
+				serr() << "--" << g_strYulOptimizations << " is invalid if Yul optimizer is disabled" << endl;
+				return false;
+			}
+
+			auto selectedOptimisations = convertContainer<set<char>>(m_args[g_strYulOptimizations].as<string>());
+			auto nonStepAbbreviations = convertContainer<set<char>>(string(yul::OptimiserSuite::NonStepAbbreviations));
+			auto stepAbbreviations = convertContainer<set<char>>(yul::OptimiserSuite::stepAbbreviationToNameMap() | boost::adaptors::map_keys);
+			set<char> invalidAbbreviations = selectedOptimisations - (nonStepAbbreviations + stepAbbreviations);
+
+			if (invalidAbbreviations.size() > 0)
+			{
+				serr() << "Invalid optimizer step abbreviation(s) in --" << g_strYulOptimizations << ": ";
+
+				auto char_to_string = [](char const& _c) -> string { return string(1, _c); };
+				serr() << boost::algorithm::join(invalidAbbreviations | boost::adaptors::transformed(char_to_string), ", ") << endl;
+				return false;
+			}
+
 			settings.yulOptimiserSteps = m_args[g_strYulOptimizations].as<string>();
+		}
 		settings.optimizeStackAllocation = settings.runYulOptimiser;
 		m_compiler->setOptimiserSettings(settings);
 
