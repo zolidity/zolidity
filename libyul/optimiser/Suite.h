@@ -26,7 +26,8 @@
 #include <libyul/optimiser/NameDispenser.h>
 #include <liblangutil/EVMVersion.h>
 
-#include <optional>
+#include <libsolidity/interface/OptimiserSettings.h>
+
 #include <set>
 #include <string>
 #include <memory>
@@ -63,8 +64,8 @@ public:
 		GasMeter const* _meter,
 		Object& _object,
 		bool _optimizeStackAllocation,
-		std::set<YulString> const& _externallyUsedIdentifiers = {},
-		std::optional<std::string> const& _customOptimisationSequence = std::nullopt
+		std::string const& _customOptimisationSequence,
+		std::set<YulString> const& _externallyUsedIdentifiers = {}
 	);
 
 	void runSequence(std::vector<std::string> const& _steps, Block& _ast);

@@ -402,16 +402,14 @@ std::optional<Json::Value> checkOptimizerDetail(Json::Value const& _details, std
 	return {};
 }
 
-std::optional<Json::Value> checkOptimizerDetail(Json::Value const& _details, std::string const& _name, optional<string>& _setting)
+std::optional<Json::Value> checkOptimizerDetail(Json::Value const& _details, std::string const& _name, string& _setting)
 {
 	if (_details.isMember(_name))
 	{
 		if (_details[_name].isString())
 			_setting = _details[_name].asString();
-		else if (_details[_name].isNull())
-			_setting = nullopt;
 		else
-			return formatFatalError("JSONError", "\"settings.optimizer.details." + _name + "\" must be a string or null");
+			return formatFatalError("JSONError", "\"settings.optimizer.details." + _name + "\" must be a string");
 	}
 	return {};
 }
