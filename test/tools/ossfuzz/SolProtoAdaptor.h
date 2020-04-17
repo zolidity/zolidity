@@ -388,7 +388,8 @@ struct SolBaseContract
 
 struct SolContract
 {
-	using FunctionList = std::vector<std::variant<std::shared_ptr<SolContractFunction>, std::shared_ptr<SolInterfaceFunction>>>;
+	using FunctionType = std::variant<std::shared_ptr<SolContractFunction>, std::shared_ptr<SolInterfaceFunction>>;
+	using FunctionList = std::vector<FunctionType>;
 
 	SolContract(
 		Contract const& _contract,
@@ -396,10 +397,23 @@ struct SolContract
 		std::shared_ptr<SolRandomNumGenerator> _prng
 	);
 
+	bool mergeFunctionBasetoContract(FunctionType _f1, FunctionType _f2);
+	void explicitOverrides();
+	template <typename T1, typename T2>
+	bool requiresMerge(T1 _f1, T2 _f2)
+	{
+		return _f1->namesake(*_f2);
+	}
+	std::shared_ptr<SolBaseContract> randomBase()
+	{
+		return m_baseContracts[randomNumber() % m_baseContracts.size()];
+	}
+
 	void merge();
 	std::string str();
 	void addFunctions(Contract const& _contract);
 	void addBases(Contract const& _contract);
+	void copyFunctions(std::shared_ptr<SolBaseContract> _base, FunctionList& _globalList);
 
 	bool validTest();
 	std::string baseNames() const;
@@ -482,6 +496,11 @@ struct SolInterface
 	bool coinToss() const
 	{
 		return randomNumber() % 2 == 0;
+	}
+
+	std::shared_ptr<SolInterface> randomBase()
+	{
+		return m_baseInterfaces[randomNumber() % m_baseInterfaces.size()];
 	}
 
 	std::string newFunctionName()

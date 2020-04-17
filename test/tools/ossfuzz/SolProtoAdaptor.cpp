@@ -741,12 +741,6 @@ void SolContract::validContractTests(map<string, map<string, string>>& _testSet)
 				b->contract()->validContractTests(_testSet);
 }
 
-//tuple<string, string, string> SolContract::pseudoRandomTest()
-//{
-//	solAssert(validTest(), "Sol proto adaptor: Please call validTest()");
-//	return validContractTests();
-//}
-
 void SolContract::addFunctions(Contract const& _contract)
 {
 	bool abs = abstract();
@@ -783,264 +777,229 @@ void SolContract::addFunctions(Contract const& _contract)
 	}
 }
 
-void SolContract::merge()
+bool SolContract::mergeFunctionBasetoContract(FunctionType _f1, FunctionType _f2)
 {
-	/* Merge algorithm:
-	 * 1. Deep copy all base interface functions (local) into a single list (global)
-	 * 2. Mark all of these as implicit overrides
-	 * 3. Iterate list of implicit overrides
-	 *   3a. If n-way merge is necessary, do so and mark a two-base explicit override and add to contract
-	 *   3b. If n-way merge is not possible, add as implicit override to contract
-	 * 4. Update ownership of n-way merges
-	 * 5. Iterate list of contract implicit and explicit (2-way) overrides
-	 *   5a. If implicit, pseudo randomly mark it explicit
+	/* There are four possible cases
+	 * 1. _f1 (base function) and _f2 (contract) are interface functions
+	 * 2. _f1 is interface function, _f2 is contract function
+	 * 3. _f1 is contract function, _f2 is interface function
+	 * 4. _f1 and _f2 are contract functions
 	 */
-	FunctionList global{};
-	// Step 1-2
-	for (auto& base: m_baseContracts) {
-		auto baseType = base->type();
-		solAssert(
-			baseType == SolBaseContract::BaseType::INTERFACE || baseType == SolBaseContract::BaseType::CONTRACT,
-			"Sol proto adaptor: Invalid base contract"
-		);
-		FunctionList local{};
-		if (baseType == SolBaseContract::BaseType::INTERFACE)
-			for (auto& f: base->interface()->m_functions)
-				local.push_back(make_shared<SolInterfaceFunction>(*f));
-		else
-			// Contract functions may be implicitly inherited
-			// interface function or contract function.
-			for (auto& f: base->contract()->m_functions) {
-				if (holds_alternative<shared_ptr<SolInterfaceFunction>>(f)) {
-					local.push_back(
-						make_shared<SolInterfaceFunction>(
-							*get<shared_ptr<SolInterfaceFunction>>(f)
-						)
-					);
-				} else {
-					local.push_back(
-						make_shared<SolContractFunction>(
-							*get<shared_ptr<SolContractFunction>>(f)
-						)
-					);
-				}
-			}
 
-		for (auto& item: local) {
-			if (holds_alternative<shared_ptr<SolInterfaceFunction>>(item)) {
-				auto function = get<shared_ptr<SolInterfaceFunction>>(item);
-				// Reset override history for past n-way merge
-				if (function->explicitOverride() && function->numOverriddenFromBases() > 1)
-					function->resetOverriddenBases();
-				// Mark interface function as an implicit override
-				function->markImplicitOverride();
-				global.push_back(item);
-			} else {
-				auto function = get<shared_ptr<SolContractFunction>>(item);
-				// Reset override history for past n-way merge
-				if (function->explicitOverride() && function->numOverriddenFromBases() > 1)
-					function->resetOverriddenBases();
-				if (!function->implicitOverride())
-					function->markImplicitContractOverride();
-				global.push_back(item);
-			}
+	// Merge status that is true only if there is a case for
+	// merging
+	bool merged = false;
+
+	// Case 1
+	if (_f1.index() == 1 && _f2.index() == 1)
+	{
+		auto function1 = get<shared_ptr<SolInterfaceFunction>>(_f1);
+		auto function2 = get<shared_ptr<SolInterfaceFunction>>(_f2);
+		if (function1->namesake(*function2))
+		{
+			function1->merge(*function2);
+			// Create new contract function
+			auto mergedContract = make_shared<SolContractFunction>(
+				SolContractFunction(
+					function1->m_overriddenFrom,
+					function1->mutability(),
+					name(),
+					function1->name(),
+					SolContractFunction::Type::EXPLICITOVERRIDEINTERFACE,
+					abstract() ? coinToss() : true,
+					coinToss(),
+					newReturnValue()
+				)
+			);
+			// Erase merged interface function
+			auto pos = find(m_functions.begin(), m_functions.end(), _f2);
+			m_functions.erase(pos);
+			m_functions.insert(pos, mergedContract);
+			merged = true;
 		}
 	}
-	// Step 3
-	FunctionList updateList;
-	for (auto& functionInBaseContract: global) {
-#if 0
-		std::cout << "Processing " << f->name() << " from " << f->m_contractName << std::endl;
-#endif
-		bool merged = false;
-		shared_ptr<SolContractFunction> mergedContract;
-		for (auto& functionInContract: m_functions) {
-			if (holds_alternative<shared_ptr<SolInterfaceFunction>>(functionInContract)) {
-				auto function = get<shared_ptr<SolInterfaceFunction>>(functionInContract);
-				// Merge interface into another interface and create a new contract function
-				if (holds_alternative<shared_ptr<SolInterfaceFunction>>(functionInBaseContract)) {
-					auto g = get<shared_ptr<SolInterfaceFunction>>(functionInBaseContract);
-					if (function->namesake(*g)) {
-#if 0
-						std::cout << "Interface function merged into interface function" << std::endl;
-						std::cout << "n-way merge of " << g->name() << " from " << g->m_contractName << std::endl;
-#endif
-						function->merge(*g);
-						// Create new contract function
-						mergedContract = make_shared<SolContractFunction>(
-							SolContractFunction(
-								function->m_overriddenFrom,
-								function->mutability(),
-								name(),
-								function->name(),
-								SolContractFunction::Type::EXPLICITOVERRIDEINTERFACE,
-								abstract() ? coinToss() : true,
-								coinToss(),
-								newReturnValue()
-							)
-						);
-						// Erase merged interface function
-						auto pos = find(m_functions.begin(), m_functions.end(), functionInContract);
-						m_functions.erase(pos);
-						m_functions.insert(pos, mergedContract);
-						merged = true;
-						break;
-					}
-				}
-				// Merge contract function into interface function
-				else {
-					auto g = get<shared_ptr<SolContractFunction>>(functionInBaseContract);
-					if (function->namesake(*g)) {
-#if 0
-						std::cout << "Contract function merged into interface function" << std::endl;
-						std::cout << "n-way merge of " << g->name() << " from " << g->m_contractName << std::endl;
-#endif
-						// Assert contract function is virtual
-						assertThrow(
-							g->isVirtual(),
-							langutil::FuzzerError,
-							"Sol proto fuzzer: n-way merge of non-virtual contract function is not possible"
-						);
-						// Merge interface into contract instead of the other way round
-						g->merge(*function);
-						// If abstract contract, we may implement
-						bool implement = abstract() ? coinToss() : true;
-						// If merged function has already been implemented
-						// we must implement.
-						if (g->implemented() && !implement)
-							implement = true;
-						// Create new contract function
-						mergedContract = make_shared<SolContractFunction>(
-							SolContractFunction(
-								g->m_overriddenFrom,
-								g->mutability(),
-								name(),
-								g->name(),
-								SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
-								implement,
-								coinToss(),
-								newReturnValue(),
-								g->visibility()
-							)
-						);
-						// Erase merged interface function
-						auto pos = find(m_functions.begin(), m_functions.end(), functionInContract);
-						m_functions.erase(pos);
-						m_functions.insert(pos, mergedContract);
-						merged = true;
-						break;
-					}
-				}
-			}
-			// Merge interface/contract into contract
-			else {
-				auto function = get<shared_ptr<SolContractFunction>>(functionInContract);
-				// Merge interface into contract function
-				if (holds_alternative<shared_ptr<SolInterfaceFunction>>(functionInBaseContract)) {
-					auto g = get<shared_ptr<SolInterfaceFunction>>(functionInBaseContract);
-					if (function->namesake(*g)) {
-#if 0
-						std::cout << "Interface function merged into contract function" << std::endl;
-						std::cout << "n-way merge of " << g->name() << " from " << g->m_contractName << std::endl;
-#endif
-						// Assert contract function is virtual
-						assertThrow(
-							function->isVirtual(),
-							langutil::FuzzerError,
-							"Sol proto fuzzer: n-way merge of non-virtual contract function is not possible"
-						);
-						function->merge(*g);
-#if 0
-						std::cout << "Overridden from " << function->overriddenFromBaseNames() << std::endl;
-#endif
-						// If abstract contract, we may implement
-						bool implement = abstract() ? coinToss() : true;
-						// If merged function has already been implemented
-						// we must implement.
-						if (function->implemented() && !implement)
-							implement = true;
-
-						// Create new contract function
-						mergedContract = make_shared<SolContractFunction>(
-							SolContractFunction(
-								function->m_overriddenFrom,
-								function->mutability(),
-								name(),
-								function->name(),
-								SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
-								implement,
-								coinToss(),
-								newReturnValue(),
-								function->visibility()
-							)
-						);
-						// Erase merged interface function
-						auto pos = find(m_functions.begin(), m_functions.end(), functionInContract);
-						m_functions.erase(pos);
-						m_functions.insert(pos, mergedContract);
-						merged = true;
-						break;
-					}
-				}
-				// Merge contract function into contract function
-				else {
-					auto g = get<shared_ptr<SolContractFunction>>(functionInBaseContract);
-					if (function->namesake(*g)) {
-#if 0
-						std::cout << "Contract function merged into contract function" << std::endl;
-						std::cout << "n-way merge of " << g->name() << " from " << g->m_contractName << std::endl;
-#endif
-						// Assert contract functions are virtual
-						assertThrow(
-							g->isVirtual() && function->isVirtual(),
-							langutil::FuzzerError,
-							"Sol proto fuzzer: n-way merge of non-virtual contract function is not possible"
-						);
-						// Check if at least one base implements function
-						bool atleastOneImplements = g->implemented() || function->implemented();
-						function->merge(*g);
-						// If abstract contract, we may implement
-						bool implement = abstract() ? coinToss() : true;
-						// If merged function has already been implemented by at
-						// least one of the bases, we must implement.
-						if (atleastOneImplements && !implement)
-							implement = true;
-
-						// Create new contract function
-						mergedContract = make_shared<SolContractFunction>(
-							SolContractFunction(
-								function->m_overriddenFrom,
-								function->mutability(),
-								name(),
-								function->name(),
-								SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
-								implement,
-								coinToss(),
-								newReturnValue(),
-								function->visibility()
-							)
-						);
-						// Erase merged interface function
-						auto pos = find(m_functions.begin(), m_functions.end(), functionInContract);
-						m_functions.erase(pos);
-						m_functions.insert(pos, mergedContract);
-						merged = true;
-						break;
-					}
-				}
-			}
+	// Case 2
+	else if (_f1.index() == 1 && _f2.index() == 0)
+	{
+		auto function1 = get<shared_ptr<SolInterfaceFunction>>(_f1);
+		auto function2 = get<shared_ptr<SolContractFunction>>(_f2);
+		if (function2->namesake(*function1))
+		{
+			assertThrow(
+				function2->isVirtual(),
+				langutil::FuzzerError,
+				"Sol proto fuzzer: n-way merge of non-virtual contract function is not possible"
+			);
+			function2->merge(*function1);
+			// If abstract contract, we may implement
+			bool implement = abstract() ? coinToss() : true;
+			// If merged function has already been implemented
+			// we must implement.
+			if (function2->implemented() && !implement)
+				implement = true;
+			// Create new contract function
+			auto mergedContract = make_shared<SolContractFunction>(
+				SolContractFunction(
+					function2->m_overriddenFrom,
+					function2->mutability(),
+					name(),
+					function2->name(),
+					SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
+					implement,
+					coinToss(),
+					newReturnValue(),
+					function2->visibility()
+				)
+			);
+			// Erase merged interface function
+			auto pos = find(m_functions.begin(), m_functions.end(), _f2);
+			m_functions.erase(pos);
+			m_functions.insert(pos, mergedContract);
+			merged = true;
 		}
-		if (!merged)
-			m_functions.push_back(functionInBaseContract);
 	}
-	// Step 4
-	for (auto& u: updateList) {
-		if (holds_alternative<shared_ptr<SolInterfaceFunction>>(u))
-			get<shared_ptr<SolInterfaceFunction>>(u)->m_contractName = name();
+	// Case 3
+	else if (_f1.index() == 0 && _f2.index() == 1)
+	{
+		auto function1 = get<shared_ptr<SolContractFunction>>(_f1);
+		auto function2 = get<shared_ptr<SolInterfaceFunction>>(_f2);
+		if (function1->namesake(*function2))
+		{
+			// Assert contract function is virtual
+			assertThrow(
+				function1->isVirtual(),
+				langutil::FuzzerError,
+				"Sol proto fuzzer: n-way merge of non-virtual contract function is not possible"
+			);
+
+			function1->merge(*function2);
+			// If abstract contract, we may implement
+			bool implement = abstract() ? coinToss() : true;
+			// If merged function has already been implemented
+			// we must implement.
+			if (function1->implemented() && !implement)
+				implement = true;
+			// Create new contract function
+			auto mergedContract = make_shared<SolContractFunction>(
+				SolContractFunction(
+					function1->m_overriddenFrom,
+					function1->mutability(),
+					name(),
+					function1->name(),
+					SolContractFunction::Type::EXPLICITOVERRIDEINTERFACE,
+					implement,
+					coinToss(),
+					newReturnValue()
+				)
+			);
+			// Erase merged interface function
+			auto pos = find(m_functions.begin(), m_functions.end(), _f2);
+			m_functions.erase(pos);
+			m_functions.insert(pos, mergedContract);
+			merged = true;
+		}
+	}
+	// Case 4
+	else
+	{
+		auto function1 = get<shared_ptr<SolContractFunction>>(_f1);
+		auto function2 = get<shared_ptr<SolContractFunction>>(_f2);
+		if (function2->namesake(*function1))
+		{
+			// Assert contract functions are virtual
+			assertThrow(
+				function1->isVirtual() && function2->isVirtual(),
+				langutil::FuzzerError,
+				"Sol proto fuzzer: n-way merge of non-virtual contract function is not possible"
+			);
+			// Check if at least one base implements function
+			bool atleastOneImplements = function1->implemented() || function2->implemented();
+			function1->merge(*function2);
+			// If abstract contract, we may implement
+			bool implement = abstract() ? coinToss() : true;
+			// If merged function has already been implemented by at
+			// least one of the bases, we must implement.
+			if (atleastOneImplements && !implement)
+				implement = true;
+			// Create new contract function
+			auto mergedContract = make_shared<SolContractFunction>(
+				SolContractFunction(
+					function1->m_overriddenFrom,
+					function1->mutability(),
+					name(),
+					function1->name(),
+					SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
+					implement,
+					coinToss(),
+					newReturnValue(),
+					function1->visibility()
+				)
+			);
+			// Erase merged interface function
+			auto pos = find(m_functions.begin(), m_functions.end(), _f2);
+			m_functions.erase(pos);
+			m_functions.insert(pos, mergedContract);
+			merged = true;
+		}
+	}
+	return merged;
+}
+
+void SolContract::copyFunctions(shared_ptr<SolBaseContract> _base, FunctionList& _globalList)
+{
+	auto baseType = _base->type();
+	solAssert(
+		baseType == SolBaseContract::BaseType::INTERFACE || baseType == SolBaseContract::BaseType::CONTRACT,
+		"Sol proto adaptor: Invalid base contract"
+	);
+
+	// Copy all base functions into global list
+	if (baseType == SolBaseContract::BaseType::INTERFACE)
+		for (auto& f: _base->interface()->m_functions)
+			_globalList.push_back(make_shared<SolInterfaceFunction>(*f));
+	else
+		// Contract functions may be implicitly inherited
+		// interface function or contract function.
+		for (auto& f: _base->contract()->m_functions)
+			if (holds_alternative<shared_ptr<SolInterfaceFunction>>(f))
+				_globalList.push_back(
+					make_shared<SolInterfaceFunction>(
+						*get<shared_ptr<SolInterfaceFunction>>(f)
+					)
+				);
+			else
+				_globalList.push_back(
+					make_shared<SolContractFunction>(
+						*get<shared_ptr<SolContractFunction>>(f)
+					)
+				);
+
+	// Reset explicit multiple overrides and mark all functions as implicit
+	for (auto& item: _globalList)
+	{
+		if (holds_alternative<shared_ptr<SolInterfaceFunction>>(item))
+		{
+			auto function = get<shared_ptr<SolInterfaceFunction>>(item);
+			// Reset override history for past n-way merge
+			if (function->explicitOverride() && function->numOverriddenFromBases() > 1)
+				function->resetOverriddenBases();
+			// Mark interface function as an implicit override
+			function->markImplicitOverride();
+		}
 		else
-			get<shared_ptr<SolContractFunction>>(u)->m_contractName = name();
+		{
+			auto function = get<shared_ptr<SolContractFunction>>(item);
+			// Reset override history for past n-way merge
+			if (function->explicitOverride() && function->numOverriddenFromBases() > 1)
+				function->resetOverriddenBases();
+			if (!function->implicitOverride())
+				function->markImplicitContractOverride();
+		}
 	}
-	// Step 5:
+}
+
+void SolContract::explicitOverrides()
+{
 	for (auto& e: m_functions)
 	{
 		// All implicitly inherited interface functions must be explicitly inherited
@@ -1050,9 +1009,6 @@ void SolContract::merge()
 			auto t = get<shared_ptr<SolInterfaceFunction>>(e);
 			if (t->implicitOverride())
 			{
-#if 0
-				std::cout << "Explicitly overriding " << t->name() << " from " << t->m_contractName << std::endl;
-#endif
 				auto pos = find(m_functions.begin(), m_functions.end(), e);
 				auto contractOverride = make_shared<SolContractFunction>(
 					SolContractFunction(
@@ -1066,17 +1022,8 @@ void SolContract::merge()
 						newReturnValue()
 					)
 				);
-#if 0
-				std::cout << "New function basenames are " << contractOverride->overriddenFromBaseNames() << std::endl;
-#endif
 				m_functions.erase(pos);
-#if 0
-				std::cout << "Size of function list after erase " << m_functions.size() << std::endl;
-#endif
 				m_functions.insert(pos, contractOverride);
-#if 0
-				std::cout << "Size of function list after insert " << m_functions.size() << std::endl;
-#endif
 			}
 		}
 		else
@@ -1169,55 +1116,87 @@ void SolContract::merge()
 						// Option 3: override and implement and optionally virtualize
 						switch (randomNumber() % 3)
 						{
-							case 0:
-								break;
-							case 1:
-							{
-								auto contractOverride = make_shared<SolContractFunction>(
-									SolContractFunction(
-										{name()},
-										t->mutability(),
-										name(),
-										t->name(),
-										SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
-										false,
-										true,
-										"",
-										t->visibility()
-									)
-								);
-								auto pos = find(m_functions.begin(), m_functions.end(), e);
-								m_functions.erase(pos);
-								m_functions.insert(pos, contractOverride);
-								break;
-							}
-							case 2:
-							{
-								auto contractOverride = make_shared<SolContractFunction>(
-									SolContractFunction(
-										{name()},
-										t->mutability(),
-										name(),
-										t->name(),
-										SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
-										true,
-										coinToss(),
-										newReturnValue(),
-										t->visibility()
-									)
-								);
-								auto pos = find(m_functions.begin(), m_functions.end(), e);
-								m_functions.erase(pos);
-								m_functions.insert(pos, contractOverride);
-								break;
-							}
+						case 0:
+							break;
+						case 1:
+						{
+							auto contractOverride = make_shared<SolContractFunction>(
+								SolContractFunction(
+									{name()},
+									t->mutability(),
+									name(),
+									t->name(),
+									SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
+									false,
+									true,
+									"",
+									t->visibility()
+								)
+							);
+							auto pos = find(m_functions.begin(), m_functions.end(), e);
+							m_functions.erase(pos);
+							m_functions.insert(pos, contractOverride);
+							break;
+						}
+						case 2:
+						{
+							auto contractOverride = make_shared<SolContractFunction>(
+								SolContractFunction(
+									{name()},
+									t->mutability(),
+									name(),
+									t->name(),
+									SolContractFunction::Type::EXPLICITOVERRIDECONTRACT,
+									true,
+									coinToss(),
+									newReturnValue(),
+									t->visibility()
+								)
+							);
+							auto pos = find(m_functions.begin(), m_functions.end(), e);
+							m_functions.erase(pos);
+							m_functions.insert(pos, contractOverride);
+							break;
+						}
 						}
 					}
 				}
 			}
 		}
 	}
-	// Step 6
+}
+
+void SolContract::merge()
+{
+	/* Merge algorithm:
+	 * 1. Deep copy all base interface functions (local) into a single list (global)
+	 * 2. Mark all of these as implicit overrides
+	 * 3. Iterate list of implicit overrides
+	 *   3a. If n-way merge is necessary, do so and mark a two-base explicit override and add to contract
+	 *   3b. If n-way merge is not possible, add as implicit override to contract
+	 * 4. Iterate list of contract implicit and explicit (2-way) overrides
+	 *   4a. If implicit, pseudo randomly mark it explicit
+	 */
+	FunctionList global{};
+	// Step 1-2
+	for (auto& base: m_baseContracts)
+		copyFunctions(base, global);
+	// Step 3
+	for (auto& functionInBaseContract: global)
+	{
+		bool merged = false;
+		for (auto& functionInContract: m_functions)
+		{
+			merged = mergeFunctionBasetoContract(functionInBaseContract, functionInContract);
+			if (merged)
+				break;
+		}
+		if (!merged)
+			m_functions.push_back(functionInBaseContract);
+	}
+	// Step 4
+	explicitOverrides();
+	// Step 5
 	if (!abstract())
 		for (auto &f: m_functions)
 			if (holds_alternative<shared_ptr<SolContractFunction>>(f))

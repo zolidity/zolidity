@@ -64,7 +64,6 @@ private:
 	std::string visit(Contract const& _contract);
 	std::string programName(CIL _program);
 	std::tuple<std::string, std::string, std::string> pseudoRandomLibraryTest();
-//	std::tuple<std::string, std::string, std::string> pseudoRandomContractTest();
 	void openProgramScope(CIL _program);
 	unsigned randomNumber();
 

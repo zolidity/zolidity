@@ -251,8 +251,6 @@ DEFINE_PROTO_FUZZER(Program const& _input)
 			"Proto solc fuzzer: Output incorrect"
 		);
 
-	return;
-
 //	auto optResult = compileDeployAndExecute(
 //		sol_source,
 //		":C",
