@@ -1,0 +1,50 @@
+Optimized IR:
+/*******************************************************
+ *                       WARNING                       *
+ *  Solidity to Yul compilation is still EXPERIMENTAL  *
+ *       It can result in LOSS OF FUNDS or worse       *
+ *                !USE AT YOUR OWN RISK!               *
+ *******************************************************/
+
+object "C_6" {
+    code {
+        {
+            mstore(64, 128)
+            if callvalue() { revert(0, 0) }
+            let programSize := datasize("C_6")
+            let argSize := sub(codesize(), programSize)
+            let memoryDataOffset := allocateMemory(argSize)
+            codecopy(memoryDataOffset, programSize, argSize)
+            abi_decode_tuple__fromMemory(memoryDataOffset, add(memoryDataOffset, argSize))
+            codecopy(0, dataoffset("C_6_deployed"), datasize("C_6_deployed"))
+            return(0, datasize("C_6_deployed"))
+        }
+        function abi_decode_tuple__fromMemory(headStart, dataEnd)
+        {
+            if slt(sub(dataEnd, headStart), 0) { revert(0, 0) }
+        }
+        function allocateMemory(size) -> memPtr
+        {
+            memPtr := mload(64)
+            let newFreePtr := add(memPtr, size)
+            if or(gt(newFreePtr, 0xffffffffffffffff), lt(newFreePtr, memPtr)) { revert(0, 0) }
+            mstore(64, newFreePtr)
+        }
+    }
+    object "C_6_deployed" {
+        code {
+            {
+                mstore(64, 128)
+                if iszero(lt(calldatasize(), 4))
+                {
+                    let selector := shift_right_224_unsigned(calldataload(0))
+                    pop(selector)
+                }
+                pop(iszero(calldatasize()))
+                revert(0, 0)
+            }
+            function shift_right_224_unsigned(value) -> newValue
+            { newValue := shr(224, value) }
+        }
+    }
+}
