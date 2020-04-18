@@ -220,7 +220,7 @@ string ProtoConverter::visit(Interface const& _interface)
 
 	openProgramScope(&_interface);
 	try {
-		auto interface = SolInterface(_interface, programName(&_interface), m_randomGen);
+		auto interface = SolInterface(_interface, programName(&_interface), nullptr, m_randomGen);
 		return interface.str();
 	}
 	catch (langutil::FuzzerError const& error)

@@ -478,6 +478,7 @@ struct SolInterface
 	SolInterface(
 		Interface const& _interface,
 		std::string _interfaceName,
+		std::shared_ptr<SolInterface> _cyclicBase,
 		std::shared_ptr<SolRandomNumGenerator> _prng
 	);
 
@@ -496,6 +497,11 @@ struct SolInterface
 	bool coinToss() const
 	{
 		return randomNumber() % 2 == 0;
+	}
+
+	bool atleastOneBase()
+	{
+		return !m_baseInterfaces.empty();
 	}
 
 	std::shared_ptr<SolInterface> randomBase()
@@ -549,6 +555,7 @@ struct SolInterface
 	std::string m_interfaceName;
 	std::vector<std::shared_ptr<SolInterfaceFunction>> m_functions;
 	std::vector<std::shared_ptr<SolInterface>> m_baseInterfaces;
+	std::shared_ptr<SolInterface> m_cyclicBaseInterface;
 	std::shared_ptr<SolRandomNumGenerator> m_prng;
 };
 }
