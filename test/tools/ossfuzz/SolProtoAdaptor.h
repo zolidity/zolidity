@@ -369,6 +369,15 @@ struct SolBaseContract
 		std::shared_ptr<SolRandomNumGenerator> _prng
 	);
 
+	SolBaseContract(
+		ProtoBaseContract _base,
+		std::string _name,
+		std::shared_ptr<SolBaseContract> _cyclicBase,
+		std::shared_ptr<SolRandomNumGenerator> _prng
+	);
+
+	SolBaseContract(std::shared_ptr<SolInterface> _base);
+
 	BaseType type() const;
 	std::string name();
 	std::string str();
@@ -380,6 +389,9 @@ struct SolBaseContract
 	{
 		return std::get<std::shared_ptr<SolContract>>(m_base);
 	}
+	std::shared_ptr<SolBaseContract> randomBase();
+	bool atleastOneBase();
+
 	unsigned functionIndex();
 	std::string lastBaseName();
 
@@ -388,12 +400,19 @@ struct SolBaseContract
 
 struct SolContract
 {
+	enum class Function
+	{
+		INTERFACE,
+		CONTRACT
+	};
+
 	using FunctionType = std::variant<std::shared_ptr<SolContractFunction>, std::shared_ptr<SolInterfaceFunction>>;
 	using FunctionList = std::vector<FunctionType>;
 
 	SolContract(
 		Contract const& _contract,
 		std::string _name,
+		std::shared_ptr<SolBaseContract> _cyclicBase,
 		std::shared_ptr<SolRandomNumGenerator> _prng
 	);
 
@@ -409,6 +428,7 @@ struct SolContract
 		return m_baseContracts[randomNumber() % m_baseContracts.size()];
 	}
 
+	bool atleastOneBase();
 	void merge();
 	std::string str();
 	void addFunctions(Contract const& _contract);
@@ -459,6 +479,29 @@ struct SolContract
 	{
 		return std::to_string(randomNumber());
 	}
+	Function functionType(FunctionType _type)
+	{
+		if (std::holds_alternative<std::shared_ptr<SolContractFunction>>(_type))
+			return Function::CONTRACT;
+		else
+			return Function::INTERFACE;
+	}
+	bool contractFunction(FunctionType _type)
+	{
+		return functionType(_type) == Function::CONTRACT;
+	}
+	bool interfaceFunction(FunctionType _type)
+	{
+		return functionType(_type) == Function::INTERFACE;
+	}
+	std::shared_ptr<SolContractFunction> getContractFunction(FunctionType _type)
+	{
+		return std::get<std::shared_ptr<SolContractFunction>>(_type);
+	}
+	std::shared_ptr<SolInterfaceFunction> getInterfaceFunction(FunctionType _type)
+	{
+		return std::get<std::shared_ptr<SolInterfaceFunction>>(_type);
+	}
 
 	std::string m_contractName;
 	bool m_abstract = false;
@@ -471,6 +514,7 @@ struct SolContract
 	/// and their expected output
 	std::map<std::string, std::string> m_contractFunctionMap;
 	std::shared_ptr<SolRandomNumGenerator> m_prng;
+	std::shared_ptr<SolBaseContract> m_cyclicBase;
 };
 
 struct SolInterface

@@ -182,7 +182,7 @@ string ProtoConverter::visit(Contract const& _contract)
 
 	openProgramScope(&_contract);
 	try {
-		auto contract = SolContract(_contract, programName(&_contract), m_randomGen);
+		auto contract = SolContract(_contract, programName(&_contract), nullptr, m_randomGen);
 		if (contract.validTest())
 		{
 			map<string, map<string, string>> testSet;

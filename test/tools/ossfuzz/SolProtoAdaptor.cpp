@@ -472,7 +472,7 @@ void SolInterface::merge()
 	 * 5. Iterate list of contract implicit and explicit (2-way) overrides
 	 *   5a. If implicit, pseudo randomly mark it explicit
 	 */
-#if 1
+#if 0
 	std::cout << "Function index before merge " << m_functionIndex << std::endl;
 #endif
 
@@ -480,7 +480,11 @@ void SolInterface::merge()
 	vector<shared_ptr<SolInterfaceFunction>> baseFunctions{};
 	for (auto &base: m_baseInterfaces)
 	{
-		m_functionIndex += base->functionIndex();
+		// At the end of this loop, this contract will resume function
+		// numbering from the base with the highest number of member
+		// functions.
+		if (m_functionIndex < base->functionIndex())
+			m_functionIndex = base->functionIndex();
 		for (auto &bf: base->m_functions)
 			baseFunctions.push_back(make_shared<SolInterfaceFunction>(*bf));
 		for (auto &l: baseFunctions)
@@ -501,18 +505,18 @@ void SolInterface::merge()
 			continue;
 		else
 			processedFunctionBasePairs.insert(pair(f->name(), f->m_contractName));
-#if 1
+#if 0
 		std::cout << "Processing " << f->name() << " from " << f->m_contractName << std::endl;
 #endif
 		bool merged = false;
 		for (auto &e: m_functions)
 		{
-#if 1
+#if 0
 			std::cout << "Comparing " << e->name() << " from " << e->m_contractName << " with " << f->name() << std::endl;
 #endif
 			if (e->namesake(*f))
 			{
-#if 1
+#if 0
 				std::cout << "n-way merge of " << f->name() << " from " << f->m_contractName << std::endl;
 #endif
 				e->merge(*f);
@@ -523,7 +527,7 @@ void SolInterface::merge()
 		}
 		if (!merged)
 		{
-#if 1
+#if 0
 			std::cout << "Adding " << f->name() << " to " << name() << std::endl;
 #endif
 			m_functions.push_back(f);
@@ -538,7 +542,7 @@ void SolInterface::merge()
 		if (e->implicitOverride() && coinToss())
 			e->markExplicitOverride(name());
 
-#if 1
+#if 0
 	std::cout << "Function index after merge " << m_functionIndex << std::endl;
 #endif
 }
@@ -559,12 +563,11 @@ void SolInterface::addBases(Interface const& _interface)
 		if (base->atleastOneBase())
 			cyclicBaseList.push_back(base->randomBase());
 
-#if 1
+#if 0
 		std::cout << "Base function index is " << base->functionIndex() << std::endl;
 #endif
-//		m_functionIndex += base->functionIndex();
 		m_lastBaseName = base->lastBaseName();
-#if 1
+#if 0
 		std::cout << "Function index before merge is called is " << m_functionIndex << std::endl;
 #endif
 	}
@@ -580,7 +583,7 @@ void SolInterface::addBases(Interface const& _interface)
 //			m_baseInterfaces.insert(m_baseInterfaces.begin(), m_cyclicBaseInterface);
 //		}
 //	}
-#if 1
+#if 0
 	std::cout << m_functionIndex << std::endl;
 #endif
 	merge();
@@ -588,7 +591,7 @@ void SolInterface::addBases(Interface const& _interface)
 
 void SolInterface::addFunctions(Interface const& _interface)
 {
-#if 1
+#if 0
 	std::cout << "Function index before addfunc is " << m_functionIndex << std::endl;
 #endif
 	for (auto &f: _interface.funcdef())
@@ -604,7 +607,7 @@ void SolInterface::addFunctions(Interface const& _interface)
 			)
 		);
 	}
-#if 1
+#if 0
 	std::cout << "Function index after addfunc is " << m_functionIndex << std::endl;
 #endif
 }
@@ -730,6 +733,56 @@ string SolBaseContract::name()
 	}
 }
 
+std::shared_ptr<SolBaseContract> SolBaseContract::randomBase()
+{
+	if (type() == BaseType::INTERFACE && interface()->atleastOneBase())
+	{
+		return make_shared<SolBaseContract>(SolBaseContract(interface()->randomBase()));
+	}
+	else if (type() == BaseType::CONTRACT && contract()->atleastOneBase())
+	{
+		return contract()->randomBase();
+	}
+	solAssert(false, "Sol proto adaptor: Invalid base contract");
+}
+
+bool SolBaseContract::atleastOneBase()
+{
+	if (type() == BaseType::INTERFACE)
+		return interface()->atleastOneBase();
+	else
+		return contract()->atleastOneBase();
+}
+
+SolBaseContract::SolBaseContract(shared_ptr<SolInterface> _base)
+{
+	m_base = _base;
+}
+
+SolBaseContract::SolBaseContract(
+	ProtoBaseContract _base,
+	string _name,
+	shared_ptr<SolBaseContract> _cyclicBase,
+	shared_ptr<SolRandomNumGenerator> _prng
+)
+{
+	if (holds_alternative<Contract const*>(_base))
+		m_base = make_shared<SolContract>(
+			SolContract(*get<Contract const*>(_base), _name, _cyclicBase, _prng)
+		);
+	else
+	{
+		solAssert(!_cyclicBase || _cyclicBase->type() == BaseType::INTERFACE, "Sol proto adaptor: Invalid interface base");
+		solAssert(holds_alternative<Interface const*>(_base), "Sol proto adaptor: Invalid base contract");
+		shared_ptr<SolInterface> baseInterface;
+		if (_cyclicBase)
+			baseInterface = _cyclicBase->interface();
+		m_base = make_shared<SolInterface>(
+			SolInterface(*get<Interface const*>(_base), _name, baseInterface, _prng)
+		);
+	}
+}
+
 SolBaseContract::SolBaseContract(
 	ProtoBaseContract _base,
 	string _name,
@@ -738,7 +791,7 @@ SolBaseContract::SolBaseContract(
 {
 	if (holds_alternative<Contract const*>(_base))
 		m_base = make_shared<SolContract>(
-			SolContract(*get<Contract const*>(_base), _name, _prng)
+			SolContract(*get<Contract const*>(_base), _name, nullptr, _prng)
 		);
 	else
 	{
@@ -1244,10 +1297,30 @@ void SolContract::merge()
 	FunctionList global{};
 	// Step 1-2
 	for (auto& base: m_baseContracts)
+	{
+		if (m_functionIndex < base->functionIndex())
+			m_functionIndex = base->functionIndex();
 		copyFunctions(base, global);
+	}
+
 	// Step 3
+	set<pair<string, string>> processedContractFunctionPair;
 	for (auto& functionInBaseContract: global)
 	{
+		if (contractFunction(functionInBaseContract))
+		{
+			if (processedContractFunctionPair.count(pair(getContractFunction(functionInBaseContract)->m_contractName, getContractFunction(functionInBaseContract)->name())))
+				continue;
+			else
+				processedContractFunctionPair.insert(pair(getContractFunction(functionInBaseContract)->m_contractName, getContractFunction(functionInBaseContract)->name()));
+		}
+		else
+		{
+			if (processedContractFunctionPair.count(pair(getInterfaceFunction(functionInBaseContract)->m_contractName, getInterfaceFunction(functionInBaseContract)->name())))
+				continue;
+			else
+				processedContractFunctionPair.insert(pair(getInterfaceFunction(functionInBaseContract)->m_contractName, getInterfaceFunction(functionInBaseContract)->name()));
+		}
 		bool merged = false;
 		for (auto& functionInContract: m_functions)
 		{
@@ -1273,29 +1346,38 @@ void SolContract::merge()
 
 void SolContract::addBases(Contract const& _contract)
 {
+	vector<shared_ptr<SolBaseContract>> cyclicBaseList;
 	shared_ptr<SolBaseContract> base;
 	for (auto &b: _contract.bases())
 	{
+		shared_ptr<SolBaseContract> cyclicBase;
 		switch (b.contract_or_interface_oneof_case())
 		{
 		case ContractOrInterface::kC:
+			if (!cyclicBaseList.empty())
+				cyclicBase = cyclicBaseList[random() % cyclicBaseList.size()];
 			base = make_shared<SolBaseContract>(
-				SolBaseContract(&b.c(), newBaseName(), m_prng)
+				SolBaseContract(&b.c(), newBaseName(), cyclicBase, m_prng)
 			);
 			break;
 		case ContractOrInterface::kI:
+			if (!cyclicBaseList.empty())
+			{
+				auto tmp = cyclicBaseList[random() % cyclicBaseList.size()];
+				if (tmp->type() == SolBaseContract::INTERFACE)
+					cyclicBase = tmp;
+			}
 			base = make_shared<SolBaseContract>(
-				SolBaseContract(&b.i(), newBaseName(), m_prng)
+				SolBaseContract(&b.i(), newBaseName(), cyclicBase, m_prng)
 			);
 			break;
 		case ContractOrInterface::CONTRACT_OR_INTERFACE_ONEOF_NOT_SET:
 			continue;
 		}
 		m_baseContracts.push_back(base);
-		// Worst case, we override all base functions so we
-		// increment derived contract's function index by
-		// this amount.
-		m_functionIndex += base->functionIndex();
+		cyclicBaseList.push_back(base);
+		if (base->atleastOneBase())
+			cyclicBaseList.push_back(base->randomBase());
 		m_lastBaseName = base->lastBaseName();
 	}
 	merge();
@@ -1305,7 +1387,8 @@ string SolContract::str()
 {
 	ostringstream bases;
 	for (auto &b: m_baseContracts)
-		bases << b->str();
+		if (!m_cyclicBase || b != m_cyclicBase)
+			bases << b->str();
 
 	ostringstream functions;
 
@@ -1328,9 +1411,15 @@ string SolContract::str()
 		.render();
 }
 
+bool SolContract::atleastOneBase()
+{
+	return !m_baseContracts.empty();
+}
+
 SolContract::SolContract(
 	Contract const& _contract,
 	std::string _name,
+	shared_ptr<SolBaseContract> _cyclicBase,
 	shared_ptr<SolRandomNumGenerator> _prng
 )
 {
@@ -1338,6 +1427,14 @@ SolContract::SolContract(
 	m_contractName = _name;
 	m_lastBaseName = m_contractName;
 	m_abstract = _contract.abstract();
+	if (_cyclicBase)
+	{
+		m_cyclicBase = _cyclicBase;
+#if 0
+		std::cout << "Adding cyclic contract base " << _cyclicBase->name() << " to " << name() << std::endl;
+#endif
+		m_baseContracts.push_back(_cyclicBase);
+	}
 	// Initialize function map.
 	m_contractFunctionMap = map<string, string>{};
 	addBases(_contract);
