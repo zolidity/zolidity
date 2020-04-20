@@ -819,6 +819,21 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			solAssert(false, "Invalid member access in contract");
 		break;
 	}
+	case Type::Category::TypeType:
+	{
+		TypeType const& type = dynamic_cast<TypeType const&>(*_memberAccess.expression().annotation().type);
+
+		switch (type.actualType()->category())
+		{
+			case Type::Category::Contract:
+				solUnimplementedAssert(false, "Member access on contracts not implemented yet");
+			case Type::Category::Enum:
+				solUnimplementedAssert(false, "Enum literals not supported yet");
+			default:
+				solAssert(false, "This TypeType does not provide member access");
+		}
+		break;
+	}
 	case Type::Category::Integer:
 	{
 		solAssert(false, "Invalid member access to integer");
