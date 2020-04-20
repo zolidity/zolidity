@@ -559,6 +559,14 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			arguments.push_back(callArguments[std::distance(callArgumentNames.begin(), it)]);
 		}
 
+	if (auto memberAccess = dynamic_cast<MemberAccess const*>(&_functionCall.expression()))
+		if (auto expressionType = dynamic_cast<TypeType const*>(memberAccess->expression().annotation().type))
+			if (auto contract = dynamic_cast<ContractDefinition const*>(expressionType->actualType()))
+				solUnimplementedAssert(
+					!contract->isLibrary() || functionType->kind() == FunctionType::Kind::Internal,
+					"Only internal function calls implemented for libraries"
+				);
+
 	solUnimplementedAssert(!functionType->bound(), "");
 	switch (functionType->kind())
 	{
@@ -571,7 +579,22 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			else
 				args.emplace_back(convert(*arguments[i], *parameterTypes[i]).commaSeparatedList());
 
-		if (auto identifier = dynamic_cast<Identifier const*>(&_functionCall.expression()))
+		if (auto memberAccess = dynamic_cast<MemberAccess const*>(&_functionCall.expression()))
+		{
+			solUnimplementedAssert(!functionType->bound(), "Internal calls to bound library functions are not yet implemented");
+
+			auto functionDef = dynamic_cast<FunctionDefinition const*>(memberAccess->annotation().referencedDeclaration);
+			solAssert(functionDef, "Libraries cannot have state variables");
+			solAssert(!functionDef->virtualSemantics(), "Libraries can neither inherit nor be inherited");
+
+			define(_functionCall) <<
+				m_context.enqueueFunctionForCodeGeneration(*functionDef) <<
+				"(" <<
+				joinHumanReadable(args) <<
+				")\n";
+			return;
+		}
+		else if (auto identifier = dynamic_cast<Identifier const*>(&_functionCall.expression()))
 		{
 			solAssert(!functionType->bound(), "");
 			if (auto functionDef = dynamic_cast<FunctionDefinition const*>(identifier->annotation().referencedDeclaration))
@@ -587,6 +610,8 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			}
 		}
 
+		// FIXME: Pointers to internal library functions are supported in Solidity but internalDispatch()
+		// does not include them so using them will result in invalid code being generated.
 		define(_functionCall) <<
 			// NOTE: internalDispatch() takes care of adding the function to function generation queue
 			m_context.internalDispatch(
@@ -826,7 +851,19 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 		switch (type.actualType()->category())
 		{
 			case Type::Category::Contract:
-				solUnimplementedAssert(false, "Member access on contracts not implemented yet");
+			{
+				ContractType const* contract = dynamic_cast<ContractType const*>(type.actualType());
+				solAssert(contract, "");
+
+				solUnimplementedAssert(
+					contract->contractDefinition().isLibrary() &&
+					dynamic_cast<FunctionDefinition const*>(_memberAccess.annotation().referencedDeclaration),
+					"Member access other than library function calls is not implemented yet"
+				);
+
+				// no-op
+				break;
+			}
 			case Type::Category::Enum:
 				solUnimplementedAssert(false, "Enum literals not supported yet");
 			default:
@@ -1228,9 +1265,9 @@ void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
 		else
 			solAssert(false, "Invalid variable kind.");
 	}
-	else if (auto contract = dynamic_cast<ContractDefinition const*>(declaration))
+	else if (dynamic_cast<ContractDefinition const*>(declaration))
 	{
-		solUnimplementedAssert(!contract->isLibrary(), "Libraries not yet supported.");
+		// no-op
 	}
 	else if (dynamic_cast<EventDefinition const*>(declaration))
 	{
