@@ -75,8 +75,6 @@ pair<string, string> IRGenerator::run(ContractDefinition const& _contract)
 
 string IRGenerator::generate(ContractDefinition const& _contract)
 {
-	solUnimplementedAssert(!_contract.isLibrary(), "Libraries not yet implemented.");
-
 	Whiskers t(R"(
 		object "<CreationObject>" {
 			code {
@@ -99,7 +97,7 @@ string IRGenerator::generate(ContractDefinition const& _contract)
 
 	t("CreationObject", creationObjectName(_contract));
 	t("memoryInit", memoryInit());
-	t("constructor", constructorCode(_contract));
+	t("constructor", _contract.isLibrary() ? "" : constructorCode(_contract));
 	t("deploy", deployCode(_contract));
 	generateQueuedFunctions();
 	t("functions", m_context.functionCollector().requestedFunctions());
