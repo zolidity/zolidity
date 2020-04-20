@@ -21,8 +21,9 @@
 }
 // ----
 // step: fullSimplify
-//
+// 
 // {
+//     let x := mload(0)
 //     mstore(1, 0)
 //     mstore(2, 0)
 //     mstore(3, 0)
@@ -37,8 +38,9 @@
 //     mstore(12, 0)
 //     mstore(13, 0)
 //     mstore(14, 0)
-//     mstore(15, 0)
-//     mstore(16, 0)
-//     mstore(17, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-//     mstore(18, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+//     let _39 := not(x)
+//     mstore(15, and(x, _39))
+//     mstore(16, and(_39, x))
+//     mstore(17, or(x, _39))
+//     mstore(18, or(_39, x))
 // }

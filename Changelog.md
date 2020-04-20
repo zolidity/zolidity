@@ -4,7 +4,7 @@ Language Features:
 
 
 Compiler Features:
-
+ * Optimizer: Simplify repeated AND and OR operations.
 
 Bugfixes:
  * Type Checker: Disallow ``virtual`` and ``override`` for constructors.
