@@ -31,90 +31,93 @@ using namespace solidity::util;
 
 string ProtoConverter::protoToSolidity(Program const& _p)
 {
+	// Create random number generator with fuzzer supplied
+	// seed.
 	m_randomGen = make_shared<SolRandomNumGenerator>(_p.seed());
 	return visit(_p);
 }
 
-string ProtoConverter::visit(TestContract const& _testContract)
+pair<string, string> ProtoConverter::generateTestCase(TestContract const& _testContract)
 {
 	ostringstream testCode;
 	string usingLibDecl;
-	m_libraryTest = false;
-
 	switch (_testContract.type())
 	{
 	case TestContract::LIBRARY:
 	{
-		if (emptyLibraryTests())
-		{
-			testCode << Whiskers(R"(
-		return 0;)")
-				.render();
-		}
-		else
-		{
-			m_libraryTest = true;
-			auto testTuple = pseudoRandomLibraryTest();
-			m_libraryName = get<0>(testTuple);
-			usingLibDecl = Whiskers(R"(
+		m_libraryTest = true;
+		auto testTuple = pseudoRandomLibraryTest();
+		m_libraryName = get<0>(testTuple);
+		usingLibDecl = Whiskers(R"(
 	using <libraryName> for uint;)")
-				("libraryName", get<0>(testTuple))
-				.render();
-			testCode << Whiskers(R"(
+			("libraryName", get<0>(testTuple))
+			.render();
+		testCode << Whiskers(R"(
 		uint x;
 		if (x.<testFunction>() != <expectedOutput>)
-			return 1;
-		return 0;)")
-				("testFunction", get<1>(testTuple))
-				("expectedOutput", get<2>(testTuple))
-				.render();
-		}
+			return 1;)")
+			("testFunction", get<1>(testTuple))
+			("expectedOutput", get<2>(testTuple))
+			.render();
 		break;
 	}
 	case TestContract::CONTRACT:
-		if (emptyContractTests())
-			testCode << Whiskers(R"(
-		return 0;)")
-				.render();
-		else
+	{
+		unsigned errorCode = 1;
+		unsigned contractVarIndex = 0;
+		for (auto& testTuple: m_contractTests)
 		{
-			unsigned errorCode = 1;
-			unsigned contractVarIndex = 0;
-			for (auto &testTuple: m_contractTests)
-			{
-				// Do this to avoid stack too deep errors
-				// We require uint as a return var, so we
-				// cannot have more than 16 variables without
-				// running into stack too deep errors
-				if (contractVarIndex >= s_maxVars)
-					break;
-				string contractName = testTuple.first;
-				string contractVarName = "tc" + to_string(contractVarIndex);
-				testCode << Whiskers(R"(
-			<contractName> <contractVarName> = new <contractName>();)")
-					("contractName", contractName)
-					("contractVarName", contractVarName)
-					.render();
-				for (auto &t: testTuple.second)
-				{
-					testCode << Whiskers(R"(
-			if (<contractVarName>.<testFunction>() != <expectedOutput>)
-				return <errorCode>;)")
-						("contractVarName", contractVarName)
-						("testFunction", t.first)
-						("expectedOutput", t.second)
-						("errorCode", to_string(errorCode))
-						.render();
-					errorCode++;
-				}
-				contractVarIndex++;
-			}
-			// Expected return value
+			// Do this to avoid stack too deep errors
+			// We require uint as a return var, so we
+			// cannot have more than 16 variables without
+			// running into stack too deep errors
+			if (contractVarIndex >= s_maxVars)
+				break;
+			string contractName = testTuple.first;
+			string contractVarName = "tc" + to_string(contractVarIndex);
 			testCode << Whiskers(R"(
-			return 0;)").render();
+		<contractName> <contractVarName> = new <contractName>();)")
+				("contractName", contractName)
+				("contractVarName", contractVarName)
+				.render();
+			for (auto& t: testTuple.second)
+			{
+				testCode << Whiskers(R"(
+		if (<contractVarName>.<testFunction>() != <expectedOutput>)
+			return <errorCode>;)")
+					("contractVarName", contractVarName)
+					("testFunction", t.first)
+					("expectedOutput", t.second)
+					("errorCode", to_string(errorCode))
+					.render();
+				errorCode++;
+			}
+			contractVarIndex++;
 		}
 		break;
 	}
+	}
+	// Expected return value when all tests pass
+	testCode << Whiskers(R"(
+		return 0;)")
+		.render();
+	return pair(usingLibDecl, testCode.str());
+}
+
+string ProtoConverter::visit(TestContract const& _testContract)
+{
+	string testCode;
+	string usingLibDecl;
+	m_libraryTest = false;
+
+	// Simply return valid uint (zero) if there are
+	// no tests.
+	if (emptyLibraryTests() || emptyContractTests())
+		testCode = Whiskers(R"(
+		return 0;)")
+			.render();
+	else
+		tie(usingLibDecl, testCode) = generateTestCase(_testContract);
 
 	return Whiskers(R"(
 contract C {<?isLibrary><usingDecl></isLibrary>
@@ -125,7 +128,7 @@ contract C {<?isLibrary><usingDecl></isLibrary>
 )")
 		("isLibrary", m_libraryTest)
 		("usingDecl", usingLibDecl)
-		("testCode", testCode.str())
+		("testCode", testCode)
 		.render();
 }
 
@@ -201,13 +204,13 @@ string ProtoConverter::visit(Contract const& _contract)
 		// a valid test case, so we simply bail.
 		else
 		{
-			std::cout << contract.str() << std::endl;
 			return "";
 		}
 	}
+	// Catch exception thrown when input specification is invalid e.g.
+	// invalid inheritance hierarchy
 	catch (langutil::FuzzerError const& error)
 	{
-		std::cout << error.what() << std::endl;
 		// Return empty string if input specification is invalid.
 		return "";
 	}
@@ -225,7 +228,6 @@ string ProtoConverter::visit(Interface const& _interface)
 	}
 	catch (langutil::FuzzerError const& error)
 	{
-		std::cout << error.what() << std::endl;
 		// Return empty string if input specification is invalid.
 		return "";
 	}
@@ -253,13 +255,6 @@ tuple<string, string, string> ProtoConverter::pseudoRandomLibraryTest()
 	return m_libraryTests[index];
 }
 
-//tuple<string, string, string> ProtoConverter::pseudoRandomContractTest()
-//{
-//	solAssert(m_contractTests.size() > 0, "Sol proto fuzzer: No contract tests found");
-//	unsigned index = randomNumber() % m_contractTests.size();
-//	return m_contractTests[index];
-//}
-
 void ProtoConverter::openProgramScope(CIL _program)
 {
 	string programNamePrefix;
@@ -269,7 +264,7 @@ void ProtoConverter::openProgramScope(CIL _program)
 		programNamePrefix = "I";
 	else
 		programNamePrefix = "L";
-	string programName = programNamePrefix + to_string(m_numPrograms++);
+	string programName = programNamePrefix + to_string(m_programNumericSuffix++);
 	m_programNameMap.insert(pair(_program, programName));
 }
 

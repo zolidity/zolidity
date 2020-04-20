@@ -25,12 +25,15 @@
 
 namespace solidity::test::solprotofuzzer
 {
+/// Random number generator that is seeded with a fuzzer
+/// supplied unsigned integer.
 struct SolRandomNumGenerator
 {
 	using RandomEngine = std::minstd_rand;
 
 	explicit SolRandomNumGenerator(unsigned _seed): m_random(RandomEngine(_seed)) {}
 
+	/// @returns a pseudo random unsigned integer
 	unsigned operator()()
 	{
 		return m_random();
@@ -62,33 +65,52 @@ private:
 	std::string visit(Interface const& _interface);
 	std::string visit(Library const& _library);
 	std::string visit(Contract const& _contract);
+	/// @returns a string pair containing a library declaration (relevant for library
+	/// tests only) and a solidity test case
+	std::pair<std::string, std::string> generateTestCase(TestContract const& _testContract);
+	/// @returns name of a program i.e., contract, library or interface
 	std::string programName(CIL _program);
+	/// @returns a tuple containing the names of the library and function under
+	/// test, and its expected output.
 	std::tuple<std::string, std::string, std::string> pseudoRandomLibraryTest();
+	/// Performs bookkeeping for a fuzzer-supplied program
 	void openProgramScope(CIL _program);
+	/// @returns a deterministic pseudo random unsigned integer
 	unsigned randomNumber();
-
+	/// @returns true if fuzzer supplied Library protobuf message
+	/// contains zero functions, false otherwise.
 	static bool emptyLibrary(Library const& _library)
 	{
 		return _library.funcdef_size() == 0;
 	}
+	/// @returns true if there are no valid library test cases, false
+	/// otherwise.
 	bool emptyLibraryTests()
 	{
 		return m_libraryTests.size() == 0;
 	}
+	/// @returns true if there are no valid contract test cases, false
+	/// otherwise.
 	bool emptyContractTests()
 	{
 		return m_contractTests.size() == 0;
 	}
-
-	unsigned m_numPrograms = 0;
+	/// Numeric suffix that is part of program names e.g., "0" in "C0"
+	unsigned m_programNumericSuffix = 0;
+	/// Flag that states whether library call is tested (true) or not (false).
 	bool m_libraryTest = false;
+	/// A smart pointer to fuzzer driven random number generator
 	std::shared_ptr<SolRandomNumGenerator> m_randomGen;
+	/// Maps const pointer to protobuf program to its string name
 	std::map<CIL, std::string> m_programNameMap;
+	/// List of tuples containing library name, function and its expected output
 	std::vector<std::tuple<std::string, std::string, std::string>> m_libraryTests;
+	/// Maps contract name to a map of function names and their expected output
 	std::map<std::string, std::map<std::string, std::string>> m_contractTests;
+	/// Name of the library under test, relevant if m_libraryTest is set
 	std::string m_libraryName;
-
-	/// Maximum number of local variables in test function
+	/// Maximum number of local variables in test function to avoid stack too deep
+	/// errors
 	static unsigned constexpr s_maxVars = 15;
 };
 }

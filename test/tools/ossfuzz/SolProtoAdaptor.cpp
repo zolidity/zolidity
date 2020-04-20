@@ -556,8 +556,10 @@ void SolInterface::addBases(Interface const& _interface)
 		if (!cyclicBaseList.empty())
 			cyclicBase = cyclicBaseList[random() % cyclicBaseList.size()];
 		auto base = make_shared<SolInterface>(SolInterface(b, newBaseName(), cyclicBase, m_prng));
+#if 0
 		if (cyclicBase)
 			std::cout << "Added " << cyclicBase->name() << " as a cyclic base of " << base->name() << std::endl;
+#endif
 		m_baseInterfaces.push_back(base);
 		cyclicBaseList.push_back(base);
 		if (base->atleastOneBase())
