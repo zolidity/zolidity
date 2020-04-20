@@ -1539,6 +1539,7 @@ string IRGeneratorForStatements::binaryOperation(
 	if (IntegerType const* type = dynamic_cast<IntegerType const*>(&_type))
 	{
 		string fun;
+		bool reversed = false;
 		// TODO: Implement all operations for signed and unsigned types.
 		switch (_operator)
 		{
@@ -1566,12 +1567,23 @@ string IRGeneratorForStatements::binaryOperation(
 			case Token::BitAnd:
 				fun = "and";
 				break;
+			case Token::SHL:
+				fun = "shl";
+				reversed = true;
+				break;
+			case Token::SAR:
+				fun = "shr";
+				reversed = true;
+				break;
 			default:
 				break;
 		}
 
 		solUnimplementedAssert(!fun.empty(), "");
-		return fun + "(" + _left + ", " + _right + ")\n";
+		if (reversed)
+			return fun + "(" + _right + ", " + _left + ")\n";
+		else
+			return fun + "(" + _left + ", " + _right + ")\n";
 	}
 	else
 		solUnimplementedAssert(false, "");
