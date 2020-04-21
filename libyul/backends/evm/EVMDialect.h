@@ -36,6 +36,8 @@ using Type = YulString;
 struct FunctionCall;
 struct Object;
 
+void visitArguments(std::function<void(Expression const&)> _visitExpression, AbstractAssembly& _assembly, FunctionCall const& _call);
+
 /**
  * Context used during code generation.
  */
@@ -48,20 +50,11 @@ struct BuiltinContext
 
 struct BuiltinFunctionForEVM: public BuiltinFunction
 {
-	struct VisitArguments
-	{
-		std::function<void(yul::Expression const&)> m_single;
-		std::function<void()> m_all;
-
-		void operator()() const { m_all(); }
-		void operator()(yul::Expression const& _arg) const { m_single(_arg); }
-	};
-
 	std::optional<evmasm::Instruction> instruction;
 	/// Function to generate code for the given function call and append it to the abstract
 	/// assembly. The fourth parameter is called to visit (and generate code for) the given
 	/// argument or for all arguments from right to left if no parameter is given.
-	std::function<void(FunctionCall const&, AbstractAssembly&, BuiltinContext&, VisitArguments const&)> generateCode;
+	std::function<void(FunctionCall const&, AbstractAssembly&, BuiltinContext&, std::function<void(Expression const&)>)> generateCode;
 };
 
 

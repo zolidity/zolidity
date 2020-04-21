@@ -160,9 +160,9 @@ NoOutputEVMDialect::NoOutputEVMDialect(EVMDialect const& _copyFrom):
 	{
 		size_t parameters = fun.second.parameters.size();
 		size_t returns = fun.second.returns.size();
-		fun.second.generateCode = [=](FunctionCall const&, AbstractAssembly& _assembly, BuiltinContext&, std::function<void()> _visitArguments)
+		fun.second.generateCode = [=](FunctionCall const& _call, AbstractAssembly& _assembly, BuiltinContext&, std::function<void(Expression const&)> _visitExpression)
 		{
-			_visitArguments();
+			visitArguments(_visitExpression, _assembly, _call);
 			for (size_t i = 0; i < parameters; i++)
 				_assembly.appendInstruction(evmasm::Instruction::POP);
 
