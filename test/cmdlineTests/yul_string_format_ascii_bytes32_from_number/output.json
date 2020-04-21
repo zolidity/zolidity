@@ -14,7 +14,12 @@ object \"C_10\" {
         // End state variable initialization for contract \"C\".
 
 
+
+
         codecopy(0, dataoffset(\"C_10_deployed\"), datasize(\"C_10_deployed\"))
+
+
+
         return(0, datasize(\"C_10_deployed\"))
 
 
