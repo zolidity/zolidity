@@ -40,6 +40,8 @@ SolFunctionStateMutability mutabilityConverter(InterfaceFunction_StateMutability
 		return SolFunctionStateMutability::VIEW;
 	case InterfaceFunction_StateMutability_PAYABLE:
 		return SolFunctionStateMutability::PAYABLE;
+	case InterfaceFunction_StateMutability_NONPAYABLE:
+		return SolFunctionStateMutability::NONPAYABLE;
 	}
 }
 
@@ -53,6 +55,8 @@ SolFunctionStateMutability mutabilityConverter(ContractFunction_StateMutability 
 		return SolFunctionStateMutability::VIEW;
 	case ContractFunction_StateMutability_PAYABLE:
 		return SolFunctionStateMutability::PAYABLE;
+	case ContractFunction_StateMutability_NONPAYABLE:
+		return SolFunctionStateMutability::NONPAYABLE;
 	}
 }
 
@@ -122,6 +126,8 @@ string functionMutability(SolFunctionStateMutability _mut)
 		return "view";
 	case SolFunctionStateMutability::PAYABLE:
 		return "payable";
+	case SolFunctionStateMutability::NONPAYABLE:
+		return "nonpayable";
 	}
 }
 
