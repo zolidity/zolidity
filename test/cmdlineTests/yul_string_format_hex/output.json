@@ -13,10 +13,8 @@ object \"C_10\" {
         // Begin state variable initialization for contract \"C\" (0 variables)
         // End state variable initialization for contract \"C\".
 
-
         codecopy(0, dataoffset(\"C_10_deployed\"), datasize(\"C_10_deployed\"))
         return(0, datasize(\"C_10_deployed\"))
-
 
     }
     object \"C_10_deployed\" {
@@ -43,7 +41,6 @@ object \"C_10\" {
             }
             if iszero(calldatasize()) {  }
             revert(0, 0)
-
 
             function abi_decode_tuple_(headStart, dataEnd)   {
                 if slt(sub(dataEnd, headStart), 0) { revert(0, 0) }
